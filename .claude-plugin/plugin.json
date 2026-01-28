@@ -1,0 +1,11 @@
+{
+  "name": "claude-code-memory",
+  "description": "Automatic memory system that remembers user preferences, work context, and ongoing projects across sessions - like Claude Chat's memory feature",
+  "version": "1.0.0",
+  "author": {
+    "name": "Paul"
+  },
+  "homepage": "https://github.com/yourusername/claude-code-memory",
+  "repository": "https://github.com/yourusername/claude-code-memory",
+  "license": "MIT"
+}

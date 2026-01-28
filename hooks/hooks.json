@@ -1,0 +1,40 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Analyze this conversation and extract memorable information about the user that would be valuable to remember in future sessions. Focus on these categories:\n\n1. **work_context**: Role, employer, projects, professional context\n2. **preferences**: Communication style, workflow preferences, how they like to work\n3. **technical_style**: Coding conventions, patterns, preferred approaches\n4. **ongoing_projects**: Active projects, directories worked in, current goals\n5. **tools_and_workflows**: Build tools, deployment methods, version control preferences\n\nOutput a JSON object with this exact structure:\n{\n  \"memories\": [\n    {\"category\": \"category_name\", \"content\": \"specific memorable fact\"}\n  ],\n  \"session_summary\": \"one sentence summary of what was discussed\"\n}\n\nRules:\n- Only extract genuinely useful, specific information\n- Skip generic or obvious things\n- If nothing memorable, return: {\"memories\": [], \"session_summary\": \"Brief session\"}\n- Each memory should be a single, clear fact\n- Avoid duplicating information across memories\n\nSession transcript follows in $ARGUMENTS",
+            "timeout": 60000
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_HOME/memory/scripts/save-memory.py\"",
+            "timeout": 30000
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_HOME/memory/scripts/check-synthesis.py\"",
+            "timeout": 30000
+          }
+        ]
+      }
+    ]
+  }
+}

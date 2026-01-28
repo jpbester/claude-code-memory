@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "min_messages": 5,
+  "categories": [
+    "work_context",
+    "preferences",
+    "technical_style",
+    "ongoing_projects",
+    "tools_and_workflows"
+  ],
+  "synthesis_interval_hours": 24,
+  "max_memories_per_category": 15,
+  "cleanup_after_days": 30
+}
