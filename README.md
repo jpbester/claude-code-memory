@@ -19,6 +19,31 @@ Just like Claude Chat's memory:
 - **Full User Control**: Pause, resume, or reset memories at any time
 - **Privacy-First**: All data stays local in `~/.claude/memory/`
 
+## Why This Project?
+
+There are several Claude Code memory solutions available ([claude-mem](https://github.com/thedotmack/claude-mem), [mcp-memory-keeper](https://github.com/mkreyman/mcp-memory-keeper), [claude-cognitive](https://github.com/GMaN1911/claude-cognitive), etc.). This project takes a different approach:
+
+| Aspect | Other Solutions | This Project |
+|--------|-----------------|--------------|
+| **Storage** | SQLite, ChromaDB, knowledge graphs | Simple JSON + Markdown files |
+| **Dependencies** | Node.js, npm packages, vector databases | Pure Python (standard library) |
+| **Architecture** | MCP servers, vector search, embeddings | Native Claude Code plugin + hooks |
+| **Complexity** | Feature-rich, requires setup | Minimal, works out of the box |
+| **API Costs** | Some require separate API calls | Zero - uses your existing subscription |
+| **UX Model** | Custom interfaces | Mirrors Claude Chat's memory exactly |
+
+**This project is for you if:**
+- You want Claude Chat's familiar memory experience in Claude Code
+- You prefer simplicity over advanced features like vector search
+- You don't want to set up databases or MCP servers
+- You want zero additional API costs
+
+**Consider alternatives if:**
+- You need semantic/vector search across memories
+- You want knowledge graph relationships
+- You need multi-instance coordination
+- You want a web UI to browse memories
+
 ## Installation
 
 ### Option 1: Using Plugin Directory
