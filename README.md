@@ -1,6 +1,14 @@
 # Claude Code Memory
 
-An automatic memory system for Claude Code that remembers your preferences, work context, and ongoing projects across sessions - just like Claude Chat's "memory from chat history" feature.
+**Bringing Claude Chat's memory feature to Claude Code.**
+
+Claude Chat (web/desktop/mobile) has a powerful [memory feature](https://support.anthropic.com/en/articles/10120662-what-is-claude-s-memory) that builds understanding over time by summarizing conversations and synthesizing key insights. This plugin brings that same capability to Claude Code.
+
+Just like Claude Chat's memory:
+- **Automatic summarization** - Conversations are analyzed and key insights extracted
+- **24-hour synthesis** - Memories are consolidated daily into a unified summary
+- **Work-focused context** - Remembers your role, projects, preferences, and technical style
+- **Full user control** - Pause, resume, or reset memories at any time
 
 ## Features
 
@@ -76,14 +84,16 @@ claude --plugin-dir /path/to/claude-code-memory
 └───────────────────────────────────────────────────────────────┘
 ```
 
-### Memory Categories
+### What Does Claude Remember?
+
+Just like Claude Chat's memory, this focuses on work-related context that improves collaboration:
 
 | Category | What It Captures |
 |----------|------------------|
-| **Work Context** | Role, employer, projects, professional context |
-| **Preferences** | Communication style, workflow preferences |
-| **Technical Style** | Coding conventions, patterns, tools |
-| **Ongoing Projects** | Active projects, directories worked in |
+| **Work Context** | Your role, projects, and professional context |
+| **Preferences** | Communication preferences and working style |
+| **Technical Style** | Technical preferences and coding style |
+| **Ongoing Projects** | Project details and ongoing work |
 | **Tools & Workflows** | Build tools, deployment, version control |
 
 ## Configuration
