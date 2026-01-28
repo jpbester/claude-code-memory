@@ -25,7 +25,7 @@ Just like Claude Chat's memory:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/claude-code-memory.git
+git clone https://github.com/jpbester/claude-code-memory.git
 
 # Run installation script
 python claude-code-memory/scripts/install.py
