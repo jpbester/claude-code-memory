@@ -134,30 +134,30 @@ After using Claude Code for a while, your `~/.claude/memory/MEMORY.md` might loo
 ```markdown
 # Claude Code Memory
 
-*Last synthesized: 2026-01-28 15:30*
+*Last synthesized: 2025-01-15 14:30*
 
 ## Work Context
-- Primary role: Full-stack developer working on .NET and TypeScript projects
-- Works on CASM asset management systems at a telecommunications company
+- Senior backend developer focused on Python and Go microservices
+- Building e-commerce platform for a retail startup
 
 ## Ongoing Projects
-- CASM.MVC - Asset management web application (ASP.NET MVC)
-- CASM-Mobile-Maui - Mobile companion app (.NET MAUI)
+- order-service - Order processing microservice (Go)
+- inventory-api - Inventory management REST API (Python/FastAPI)
 
 ## Preferences
-- Prefers detailed documentation with functional explanations
-- Uses agents and subagents for complex multi-step tasks
-- Likes to see code references with file paths and line numbers
+- Prefers concise code comments over verbose documentation
+- Likes seeing test coverage reports after changes
+- Wants error messages to include suggested fixes
 
 ## Technical Style
-- Follows .NET naming conventions (PascalCase for public, camelCase for private)
-- Prefers async/await patterns over callbacks
-- Uses Entity Framework Core for data access
+- Uses snake_case for Python, camelCase for Go
+- Prefers composition over inheritance
+- Always includes context managers for resource handling
 
 ## Tools & Workflows
-- Uses Visual Studio and VS Code
-- Git for version control with feature branch workflow
-- Azure DevOps for CI/CD pipelines
+- Uses VS Code with vim keybindings
+- Docker Compose for local development
+- GitHub Actions for CI/CD
 ```
 
 ## Uninstalling
