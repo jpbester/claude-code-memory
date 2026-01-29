@@ -16,8 +16,7 @@ Claude Code Memory is a marketplace plugin that provides automatic memory extrac
 
 **Hook-based Memory Flow (Dual Extraction Strategy):**
 1. **SessionStart** (`check-synthesis.js`): Checks if synthesis is overdue and triggers background synthesis if needed
-2. **Stop** (prompt hook in `hooks.json`): AI-powered extraction — asks Claude to extract memories and embeds them in the transcript via `systemMessage` with `MEMORY_EXTRACT:` prefix
-3. **SessionEnd** (`save-memory.js`): Finds transcript, scans for AI markers first, falls back to heuristic extraction if none found
+2. **SessionEnd** (`save-memory.js`): Finds transcript, extracts conversation text, calls `claude -p` (Haiku) for AI extraction, falls back to heuristic extraction if that fails
 
 **Transcript Discovery** (`findTranscriptPath` in `memory-utils.js`):
 - Strategy 1: Use `hookData.transcript_path` directly if file exists
@@ -25,8 +24,8 @@ Claude Code Memory is a marketplace plugin that provides automatic memory extrac
 - Strategy 3: Scan all project directories for `{session_id}.jsonl`
 
 **Extraction Strategies** (in `save-memory.js`):
-- **AI markers**: Scan transcript for `MEMORY_EXTRACT:` prefix left by Stop prompt hook, use the last one found
-- **Heuristic fallback**: Pattern-match user messages for preferences, work context, tech stack, frameworks, and session activities
+- **AI extraction (primary)**: Parse transcript JSONL, extract only human-typed user messages and assistant text responses (skip tool_result/tool_use blocks, commands, progress entries), cap at ~50KB, pipe to `claude -p --model haiku` for intelligent memory extraction. Uses existing Claude Code auth — no API key needed.
+- **Heuristic fallback**: If `claude -p` fails (not found, timeout, error), pattern-match user messages for preferences, work context, tech stack, frameworks, and session activities
 
 **Memory Storage** (`~/.claude/memory/`):
 - `MEMORY.md` - Synthesized memories loaded into sessions via `@memory/MEMORY.md` import in user's CLAUDE.md

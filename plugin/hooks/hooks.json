@@ -1,17 +1,5 @@
 {
   "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "You are a memory extraction assistant. Analyze the conversation and extract memorable information about the user.\n\nExtract up to 10 memories from this conversation. Each memory should be a short, factual statement (under 200 chars) in one of these categories:\n- work_context: Role, employer, projects, team info\n- preferences: Communication style, workflow preferences, things they like/dislike\n- technical_style: Coding conventions, patterns, language preferences\n- ongoing_projects: Active projects, repositories, directories\n- tools_and_workflows: Build tools, deployment, version control, frameworks\n\nOnly extract information the USER explicitly stated or clearly demonstrated. Do not infer or guess.\n\nIf the conversation has no memorable information (e.g., quick questions, commands only), return an empty extraction.\n\nYou MUST respond with valid JSON in this exact format:\n{\"decision\":\"approve\",\"reason\":\"memory extraction\",\"systemMessage\":\"MEMORY_EXTRACT:{\\\"memories\\\":[{\\\"category\\\":\\\"work_context\\\",\\\"content\\\":\\\"Example memory\\\"}]}\"}\n\nIf nothing memorable:\n{\"decision\":\"approve\",\"reason\":\"no memories to extract\",\"systemMessage\":\"\"}",
-            "timeout": 30000
-          }
-        ]
-      }
-    ],
     "SessionEnd": [
       {
         "matcher": "",
@@ -19,7 +7,7 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/save-memory.js\"",
-            "timeout": 30000
+            "timeout": 120000
           }
         ]
       }

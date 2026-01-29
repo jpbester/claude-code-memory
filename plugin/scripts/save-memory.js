@@ -1,12 +1,19 @@
 #!/usr/bin/env node
 /**
  * SessionEnd hook script for claude-code-memory.
- * Reads session metadata from stdin, finds and parses the transcript file,
- * extracts memorable information via AI markers or heuristics, and saves a session file.
+ *
+ * Reads session metadata from stdin, finds the transcript file,
+ * extracts conversation text (user messages + assistant text only),
+ * calls `claude -p` (haiku) for AI-powered memory extraction,
+ * and falls back to heuristic extraction if that fails.
  */
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 const { getMemoryDir, ensureDirs, loadConfig, readStdin, formatTimestamp, findTranscriptPath } = require('./memory-utils');
+
+const MAX_CONVERSATION_BYTES = 50000; // ~15K tokens, well within Haiku's context
+const MAX_MEMORIES = 15;
 
 async function main() {
   const memoryDir = getMemoryDir();
@@ -26,7 +33,7 @@ async function main() {
     return 1;
   }
 
-  // Parse stdin - could be session metadata or pre-extracted memories
+  // Parse stdin
   let hookData;
   try {
     hookData = JSON.parse(hookInput);
@@ -50,44 +57,45 @@ async function main() {
   let sessionSummary = 'Session';
   let workingDir = hookData.cwd || process.cwd();
 
-  // Format 1: Pre-extracted memories (from a working prompt hook)
+  // Legacy format: pre-extracted memories piped directly
   if (hookData.memories && Array.isArray(hookData.memories)) {
     memories = hookData.memories;
     sessionSummary = hookData.session_summary || 'Session';
-  }
-  // Format 2: Wrapped in output field
-  else if (hookData.output) {
+  } else if (hookData.output) {
     try {
       const outputData = typeof hookData.output === 'string'
-        ? JSON.parse(hookData.output)
-        : hookData.output;
+        ? JSON.parse(hookData.output) : hookData.output;
       if (outputData.memories) {
         memories = outputData.memories;
         sessionSummary = outputData.session_summary || 'Session';
       }
-    } catch {
-      // Fall through to transcript extraction
-    }
+    } catch { /* fall through to transcript extraction */ }
   }
 
-  // Format 3: Session metadata — find and parse transcript
+  // Main path: find transcript and extract from it
   if (!memories.length && (hookData.session_id || hookData.cwd)) {
     const transcriptPath = findTranscriptPath(hookData);
 
     if (transcriptPath) {
       try {
-        const result = extractFromTranscript(transcriptPath, config, workingDir);
-        memories = result.memories;
-        sessionSummary = result.summary || `Session in ${path.basename(workingDir)}`;
+        const conversation = extractConversationText(transcriptPath, config);
+        if (conversation.text) {
+          // Try AI extraction first, fall back to heuristics
+          memories = await tryAIExtraction(conversation.text);
+          if (!memories.length) {
+            memories = heuristicExtraction(conversation, config, workingDir);
+          }
+          sessionSummary = `Session with ${conversation.messageCount} messages in ${path.basename(workingDir)}`;
+        }
       } catch (e) {
-        process.stderr.write(`Transcript extraction error: ${e.message}\n`);
+        process.stderr.write(`Extraction error: ${e.message}\n`);
       }
     }
   }
 
   if (!memories.length) return 0;
 
-  // Validate memories against configured categories
+  // Validate and save
   const validCategories = new Set(config.categories || []);
   const validMemories = memories.filter(mem =>
     mem && typeof mem === 'object' && mem.category && mem.content &&
@@ -95,14 +103,12 @@ async function main() {
   ).map(mem => ({
     category: String(mem.category),
     content: String(mem.content).slice(0, 500)
-  }));
+  })).slice(0, MAX_MEMORIES);
 
   if (!validMemories.length) return 0;
 
-  // Save session file
   const timestamp = new Date();
   const sessionId = hookData.session_id || formatTimestamp(timestamp);
-
   const sessionData = {
     session_id: sessionId,
     timestamp: timestamp.toISOString(),
@@ -123,179 +129,204 @@ async function main() {
 }
 
 /**
- * Extract memories from a transcript file.
- * Uses dual strategy: AI markers first, then heuristic fallback.
+ * Extract only human-typed conversation text from a transcript file.
+ * Filters out tool_result blocks, tool_use blocks, commands, progress entries, etc.
+ * Returns condensed conversation text suitable for AI analysis.
  */
-function extractFromTranscript(transcriptPath, config, workingDir) {
-  if (!fs.existsSync(transcriptPath)) {
-    return { memories: [], summary: '' };
-  }
-
+function extractConversationText(transcriptPath, config) {
   const raw = fs.readFileSync(transcriptPath, 'utf-8');
   const lines = raw.split('\n').filter(l => l.trim());
-  const entries = [];
+
+  const userMessages = [];
+  const assistantMessages = [];
+  let totalBytes = 0;
 
   for (const line of lines) {
-    try {
-      entries.push(JSON.parse(line));
-    } catch {
-      // Skip non-JSON lines
+    if (totalBytes >= MAX_CONVERSATION_BYTES) break;
+
+    let entry;
+    try { entry = JSON.parse(line); } catch { continue; }
+
+    // Skip non-message entries and meta/skill prompt injections
+    if (!entry.message || !entry.type || entry.type === 'file-history-snapshot' ||
+        entry.type === 'summary' || entry.type === 'progress' || entry.isMeta) {
+      continue;
     }
-  }
 
-  if (!entries.length) {
-    return { memories: [], summary: '' };
-  }
-
-  // Strategy 1: Look for AI-extracted MEMORY_EXTRACT markers in system messages
-  const aiMemories = scanForAIMarkers(entries);
-  if (aiMemories.length) {
-    return {
-      memories: aiMemories.slice(0, 25),
-      summary: `AI-extracted memories`
-    };
-  }
-
-  // Strategy 2: Heuristic extraction from conversation content
-  return heuristicExtraction(entries, config, workingDir);
-}
-
-/**
- * Scan transcript entries for MEMORY_EXTRACT: markers left by the Stop prompt hook.
- * Uses the LAST marker found (most complete view of conversation).
- */
-function scanForAIMarkers(entries) {
-  let lastMarkerMemories = null;
-
-  for (const entry of entries) {
-    // Check system messages in assistant entries for the marker
-    const content = getEntryTextContent(entry);
+    const role = entry.message.role;
+    const content = entry.message.content;
     if (!content) continue;
 
-    const markerIdx = content.indexOf('MEMORY_EXTRACT:');
-    if (markerIdx === -1) continue;
-
-    try {
-      const jsonStr = content.substring(markerIdx + 'MEMORY_EXTRACT:'.length).trim();
-      // Find the JSON object
-      const braceStart = jsonStr.indexOf('{');
-      if (braceStart === -1) continue;
-
-      // Find matching closing brace
-      let depth = 0;
-      let braceEnd = -1;
-      for (let i = braceStart; i < jsonStr.length; i++) {
-        if (jsonStr[i] === '{') depth++;
-        else if (jsonStr[i] === '}') {
-          depth--;
-          if (depth === 0) { braceEnd = i + 1; break; }
-        }
+    if (role === 'user') {
+      const text = extractHumanText(content);
+      if (text && text.length > 5) {
+        userMessages.push(text);
+        totalBytes += text.length;
       }
-      if (braceEnd === -1) continue;
-
-      const parsed = JSON.parse(jsonStr.substring(braceStart, braceEnd));
-      if (parsed.memories && Array.isArray(parsed.memories) && parsed.memories.length) {
-        lastMarkerMemories = parsed.memories;
+    } else if (role === 'assistant') {
+      const text = extractAssistantText(content);
+      if (text && text.length > 5) {
+        assistantMessages.push(text);
+        totalBytes += text.length;
       }
-    } catch {
-      // Skip malformed markers
     }
   }
 
-  return lastMarkerMemories || [];
+  // Apply min_messages threshold
+  const messageCount = userMessages.length + assistantMessages.length;
+  const minMessages = config.min_messages || 5;
+  if (messageCount < minMessages) {
+    return { text: '', messageCount, userMessages: [], assistantMessages: [] };
+  }
+
+  // Build conversation text, prioritizing recent messages if over limit
+  let parts = [];
+  const allMessages = [];
+
+  // Interleave user and assistant messages in order
+  const maxUser = userMessages.length;
+  const maxAssistant = assistantMessages.length;
+  const maxLen = Math.max(maxUser, maxAssistant);
+
+  for (let i = 0; i < maxLen; i++) {
+    if (i < maxUser) allMessages.push(`USER: ${userMessages[i]}`);
+    if (i < maxAssistant) allMessages.push(`ASSISTANT: ${assistantMessages[i]}`);
+  }
+
+  // Take from the end if too large (recent messages are more relevant)
+  let text = allMessages.join('\n\n');
+  if (Buffer.byteLength(text) > MAX_CONVERSATION_BYTES) {
+    // Work backwards from most recent
+    parts = [];
+    let size = 0;
+    for (let i = allMessages.length - 1; i >= 0; i--) {
+      const msgSize = Buffer.byteLength(allMessages[i]);
+      if (size + msgSize > MAX_CONVERSATION_BYTES) break;
+      parts.unshift(allMessages[i]);
+      size += msgSize;
+    }
+    text = parts.join('\n\n');
+  }
+
+  return { text, messageCount, userMessages, assistantMessages };
 }
 
 /**
- * Extract text content from a transcript entry.
- * Handles the actual JSONL format where content is at entry.message.content.
+ * Extract only human-typed text from a user message content.
+ * Skips tool_result blocks (file contents, command output),
+ * command messages, and system tags.
  */
-function getEntryTextContent(entry) {
-  if (!entry) return '';
-
-  // Skip non-message entries
-  const entryType = entry.type;
-  if (entryType === 'file-history-snapshot' || entryType === 'summary' || entryType === 'progress') {
-    return '';
+function extractHumanText(content) {
+  if (typeof content === 'string') {
+    // Skip command messages
+    if (content.includes('<command-name>') || content.includes('<command-message>') ||
+        content.includes('<local-command')) {
+      return '';
+    }
+    return content.trim();
   }
 
-  // The actual message is nested under entry.message
-  const msg = entry.message;
-  if (!msg) return '';
-
-  const content = msg.content;
-  if (!content) return '';
-
-  if (typeof content === 'string') return content;
-
   if (Array.isArray(content)) {
-    return content
-      .map(block => {
-        if (typeof block === 'string') return block;
-        if (block.type === 'text') return block.text || '';
-        if (block.type === 'tool_result') {
-          if (typeof block.content === 'string') return block.content;
-          return '';
+    const textParts = [];
+    for (const block of content) {
+      if (typeof block === 'string') {
+        textParts.push(block);
+      } else if (block.type === 'text' && block.text) {
+        // Skip skill/command injection text (usually very long prompt injections)
+        if (block.text.includes('<command-name>') || block.text.includes('<command-message>')) {
+          continue;
         }
-        return '';
-      })
-      .filter(Boolean)
-      .join('\n');
+        // Skip meta skill prompts (injected by skills, not typed by user)
+        if (block.text.length > 2000) continue;
+        textParts.push(block.text);
+      }
+      // Explicitly skip tool_result blocks — these are file contents, command output, etc.
+    }
+    const joined = textParts.join(' ').trim();
+    return joined;
   }
 
   return '';
 }
 
 /**
- * Get the role from a transcript entry.
+ * Extract only text content from assistant messages.
+ * Skips tool_use blocks (tool calls) — we only want the natural language responses.
  */
-function getEntryRole(entry) {
-  if (!entry || !entry.message) return '';
-  return entry.message.role || '';
+function extractAssistantText(content) {
+  if (typeof content === 'string') return content.trim();
+
+  if (Array.isArray(content)) {
+    const textParts = [];
+    for (const block of content) {
+      if (typeof block === 'string') {
+        textParts.push(block);
+      } else if (block.type === 'text' && block.text) {
+        // Cap individual assistant messages to avoid huge code explanations
+        textParts.push(block.text.length > 1000 ? block.text.substring(0, 1000) + '...' : block.text);
+      }
+      // Skip tool_use blocks entirely
+    }
+    return textParts.join(' ').trim();
+  }
+
+  return '';
 }
 
 /**
- * Heuristic extraction: analyze conversation text for memorable content.
+ * Try AI-powered extraction using claude -p (haiku model).
+ * Uses the user's existing Claude Code authentication — no API key needed.
+ * Pipes conversation text via stdin using execSync's input option.
  */
-function heuristicExtraction(entries, config, workingDir) {
+async function tryAIExtraction(conversationText) {
+  const prompt = 'Extract up to 10 memorable facts about the user from the conversation provided on stdin. Each must be a short factual statement (under 200 chars) in one of these categories: work_context, preferences, technical_style, ongoing_projects, tools_and_workflows. Only extract what the USER explicitly stated. Return ONLY valid JSON: {"memories":[{"category":"...","content":"..."}]}';
+
+  try {
+    const result = execSync(
+      `claude -p "${prompt}" --model haiku --no-session-persistence --max-turns 2`,
+      {
+        input: conversationText,
+        encoding: 'utf-8',
+        timeout: 90000,
+        shell: true,
+        windowsHide: true
+      }
+    );
+
+    // Parse the response — claude -p outputs text directly
+    const trimmed = result.trim();
+
+    // Find JSON in the response (may be wrapped in markdown code blocks)
+    const jsonStart = trimmed.indexOf('{');
+    const jsonEnd = trimmed.lastIndexOf('}');
+    if (jsonStart === -1 || jsonEnd === -1) return [];
+
+    const parsed = JSON.parse(trimmed.substring(jsonStart, jsonEnd + 1));
+    if (parsed.memories && Array.isArray(parsed.memories)) {
+      return parsed.memories.filter(m =>
+        m && typeof m.category === 'string' && typeof m.content === 'string'
+      );
+    }
+
+    return [];
+  } catch (e) {
+    // claude -p failed (not installed, timeout, auth issue, etc.) — fall back to heuristics
+    process.stderr.write(`AI extraction fallback: ${e.message ? e.message.substring(0, 200) : 'unknown error'}\n`);
+    return [];
+  }
+}
+
+/**
+ * Heuristic extraction fallback — pattern-match user messages for memorable content.
+ */
+function heuristicExtraction(conversation, config, workingDir) {
   const memories = [];
-  const userMessages = [];
-  const assistantMessages = [];
-
-  for (const entry of entries) {
-    const entryType = entry.type;
-    // Skip non-conversation entries
-    if (entryType === 'file-history-snapshot' || entryType === 'summary' || entryType === 'progress') {
-      continue;
-    }
-
-    const content = getEntryTextContent(entry);
-    if (!content) continue;
-
-    const role = getEntryRole(entry);
-
-    // Skip command/system messages
-    if (content.includes('<command-name>') || content.includes('<local-command')) {
-      continue;
-    }
-
-    if (role === 'user') {
-      userMessages.push(content);
-    } else if (role === 'assistant') {
-      assistantMessages.push(content);
-    }
-  }
-
-  // Apply min_messages threshold
-  const totalMessages = userMessages.length + assistantMessages.length;
-  const minMessages = config.min_messages || 5;
-  if (totalMessages < minMessages) {
-    return { memories: [], summary: '' };
-  }
+  const { userMessages, assistantMessages } = conversation;
 
   const allUserText = userMessages.join('\n');
   const allText = [...userMessages, ...assistantMessages].join('\n');
 
-  // --- Preference patterns ---
+  // Preference patterns
   const preferencePatterns = [
     { pattern: /\bi (?:prefer|like to|want to|always use|usually|tend to)\b/i, category: 'preferences' },
     { pattern: /\bplease (?:always|never|don't|do not)\b/i, category: 'preferences' },
@@ -315,13 +346,13 @@ function heuristicExtraction(entries, config, workingDir) {
       for (const { pattern, category } of preferencePatterns) {
         if (pattern.test(trimmed)) {
           memories.push({ category, content: trimmed });
-          break; // One category per sentence
+          break;
         }
       }
     }
   }
 
-  // --- Technology detection ---
+  // Technology detection (2+ mentions required)
   const extCounts = {};
   const extPattern = /\.(ts|tsx|js|jsx|py|cs|java|go|rs|rb|php|vue|svelte|swift|kt|cpp|c|h)\b/gi;
   let match;
@@ -329,38 +360,31 @@ function heuristicExtraction(entries, config, workingDir) {
     const ext = match[1].toLowerCase();
     extCounts[ext] = (extCounts[ext] || 0) + 1;
   }
-  // Only record extensions mentioned 2+ times
   const significantExts = Object.entries(extCounts)
     .filter(([, count]) => count >= 2)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
 
   if (significantExts.length) {
-    const extList = significantExts.map(([ext]) => `.${ext}`).join(', ');
     memories.push({
       category: 'technical_style',
-      content: `Works with file types: ${extList}`
+      content: `Works with file types: ${significantExts.map(([ext]) => `.${ext}`).join(', ')}`
     });
   }
 
-  // --- Framework/tool detection ---
+  // Framework detection (2+ mentions required)
   const frameworks = [
     { names: ['React', 'react'], label: 'React' },
     { names: ['Next.js', 'nextjs', 'next/'], label: 'Next.js' },
     { names: ['Vue', 'vue'], label: 'Vue' },
     { names: ['Angular', 'angular'], label: 'Angular' },
     { names: ['Django', 'django'], label: 'Django' },
-    { names: ['Flask', 'flask'], label: 'Flask' },
     { names: ['Express', 'express'], label: 'Express' },
     { names: ['Docker', 'docker', 'Dockerfile'], label: 'Docker' },
     { names: ['.NET', 'dotnet', 'ASP.NET', 'Entity Framework'], label: '.NET' },
-    { names: ['Spring', 'spring-boot'], label: 'Spring' },
-    { names: ['Rails', 'ruby on rails'], label: 'Rails' },
-    { names: ['Laravel', 'laravel'], label: 'Laravel' },
     { names: ['Tailwind', 'tailwindcss'], label: 'Tailwind CSS' },
-    { names: ['PostgreSQL', 'postgres', 'psql'], label: 'PostgreSQL' },
-    { names: ['MongoDB', 'mongoose', 'mongo'], label: 'MongoDB' },
-    { names: ['Redis', 'redis'], label: 'Redis' },
+    { names: ['PostgreSQL', 'postgres'], label: 'PostgreSQL' },
+    { names: ['MongoDB', 'mongoose'], label: 'MongoDB' },
     { names: ['Kubernetes', 'k8s', 'kubectl'], label: 'Kubernetes' },
   ];
 
@@ -382,41 +406,15 @@ function heuristicExtraction(entries, config, workingDir) {
     });
   }
 
-  // --- Working directory as project context ---
-  if (workingDir && workingDir !== process.cwd()) {
+  // Working directory as project context
+  if (workingDir) {
     memories.push({
       category: 'ongoing_projects',
       content: `Worked in: ${workingDir}`
     });
   }
 
-  // --- Activity type analysis ---
-  const activities = [];
-  if (/\bgit\s+(commit|push|pull|merge|rebase|branch|checkout)\b/i.test(allText)) {
-    activities.push('git operations');
-  }
-  if (/\b(test|spec|jest|mocha|pytest|vitest)\b/i.test(allText) && /\b(test|spec|jest|mocha|pytest|vitest)\b/gi.test(allText)) {
-    activities.push('testing');
-  }
-  if (/\b(debug|breakpoint|console\.log|debugger)\b/i.test(allText)) {
-    activities.push('debugging');
-  }
-  if (/\b(deploy|CI\/CD|pipeline|build)\b/i.test(allText)) {
-    activities.push('deployment/CI');
-  }
-
-  if (activities.length) {
-    memories.push({
-      category: 'tools_and_workflows',
-      content: `Session activities: ${activities.join(', ')}`
-    });
-  }
-
-  // Cap total memories
-  const limited = memories.slice(0, 25);
-  const summary = `Session with ${totalMessages} messages in ${path.basename(workingDir || 'unknown')}`;
-
-  return { memories: limited, summary };
+  return memories.slice(0, MAX_MEMORIES);
 }
 
 main().then(code => process.exit(code)).catch(() => process.exit(1));
