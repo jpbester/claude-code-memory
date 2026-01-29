@@ -46,27 +46,33 @@ There are several Claude Code memory solutions available ([claude-mem](https://g
 
 ## Installation
 
-### Option 1: Using Plugin Directory
+### Why Not a Marketplace Plugin?
+
+Claude Code has a plugin marketplace, and some memory plugins (like [claude-mem](https://github.com/thedotmack/claude-mem)) use it. However, marketplace plugins run from a cache directory that gets replaced on updates - which would wipe your accumulated memories.
+
+This plugin stores memories in `~/.claude/memory/`, a stable location that survives plugin updates, reinstalls, and even uninstalls. The one-time install script sets up this directory and connects it to your Claude Code sessions. It's a small step that ensures your memories are always safe.
+
+Additionally, there are currently [known issues](https://github.com/anthropics/claude-code/issues/11984) with marketplace plugins that use Python scripts on Windows, which would affect reliability.
+
+### Quick Start
 
 ```bash
-# Clone the repository
+# Clone and install
 git clone https://github.com/jpbester/claude-code-memory.git
-
-# Run installation script
 python claude-code-memory/scripts/install.py
 
 # Start Claude Code with the plugin
 claude --plugin-dir /path/to/claude-code-memory
 ```
 
-### Option 2: Manual Installation
+The install script:
+- Creates `~/.claude/memory/` for your memory data
+- Copies the Python scripts to a stable location
+- Adds a memory import to your `~/.claude/CLAUDE.md`
 
-1. Clone this repository
-2. Run the installation script:
-   ```bash
-   python scripts/install.py
-   ```
-3. Add the plugin to your Claude Code configuration
+### Unloading the Plugin (Memories Persist)
+
+If you remove the `--plugin-dir` flag or uninstall, your memories remain safely in `~/.claude/memory/`. To fully remove everything, see [Uninstalling](#uninstalling).
 
 ## Usage
 
