@@ -2,6 +2,7 @@
 name: memory-pause
 description: Pause memory collection. Claude keeps existing memories but won't create new ones. Use /memory-resume to re-enable.
 user-invocable: true
+allowed-tools: Read, Write
 ---
 
 # Pause Memory Collection

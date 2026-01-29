@@ -2,6 +2,7 @@
 name: memory-resume
 description: Resume memory collection after pausing. New sessions will be analyzed for memories again.
 user-invocable: true
+allowed-tools: Read, Write
 ---
 
 # Resume Memory Collection

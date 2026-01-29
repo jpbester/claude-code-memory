@@ -2,6 +2,7 @@
 name: memory-reset
 description: Permanently delete all memories including session files and synthesized memory. This cannot be undone!
 user-invocable: true
+allowed-tools: Read, Write, Bash(rm *), Bash(ls *)
 ---
 
 # Reset All Memory

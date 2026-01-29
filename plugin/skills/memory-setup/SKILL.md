@@ -2,6 +2,7 @@
 name: memory-setup
 description: One-time setup to connect the memory system to your CLAUDE.md. Run this after installing the plugin.
 user-invocable: true
+allowed-tools: Read, Write, Bash(ls *), Bash(mkdir *), Glob
 ---
 
 # Memory Setup

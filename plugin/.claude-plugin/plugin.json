@@ -1,6 +1,6 @@
 {
   "name": "claude-code-memory",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "description": "Automatic memory system that remembers preferences, work context, and projects across sessions",
   "author": { "name": "Paul" },
   "homepage": "https://github.com/jpbester/claude-code-memory",

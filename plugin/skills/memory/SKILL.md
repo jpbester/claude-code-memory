@@ -3,6 +3,7 @@ name: memory
 description: View your Claude Code memories and memory system status. Shows synthesized memories, session count, and last sync time.
 user-invocable: true
 argument-hint: "[status|view|sync]"
+allowed-tools: Read, Bash(ls *), Bash(wc *), Bash(cat *), Bash(node *), Glob
 ---
 
 # Memory Management
