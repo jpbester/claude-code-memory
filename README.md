@@ -26,7 +26,7 @@ There are several Claude Code memory solutions available ([claude-mem](https://g
 | Aspect | Other Solutions | This Project |
 |--------|-----------------|--------------|
 | **Storage** | SQLite, ChromaDB, knowledge graphs | Simple JSON + Markdown files |
-| **Dependencies** | Node.js, npm packages, vector databases | Pure Python (standard library) |
+| **Dependencies** | Node.js, npm packages, vector databases | Zero dependencies (Node.js built-ins only) |
 | **Architecture** | MCP servers, vector search, embeddings | Native Claude Code plugin + hooks |
 | **Complexity** | Feature-rich, requires setup | Minimal, works out of the box |
 | **API Costs** | Some require separate API calls | Zero - uses your existing subscription |
@@ -46,33 +46,35 @@ There are several Claude Code memory solutions available ([claude-mem](https://g
 
 ## Installation
 
-### Why Not a Marketplace Plugin?
-
-Claude Code has a plugin marketplace, and some memory plugins (like [claude-mem](https://github.com/thedotmack/claude-mem)) use it. However, marketplace plugins run from a cache directory that gets replaced on updates - which would wipe your accumulated memories.
-
-This plugin stores memories in `~/.claude/memory/`, a stable location that survives plugin updates, reinstalls, and even uninstalls. The one-time install script sets up this directory and connects it to your Claude Code sessions. It's a small step that ensures your memories are always safe.
-
-Additionally, there are currently [known issues](https://github.com/anthropics/claude-code/issues/11984) with marketplace plugins that use Python scripts on Windows, which would affect reliability.
-
-### Quick Start
+### From Marketplace
 
 ```bash
-# Clone and install
-git clone https://github.com/jpbester/claude-code-memory.git
-python claude-code-memory/scripts/install.py
+# Add the plugin catalog
+/plugin marketplace add jpbester/claude-code-memory
 
-# Start Claude Code with the plugin
-claude --plugin-dir /path/to/claude-code-memory
+# Install the memory plugin
+/plugin install claude-code-memory
 ```
 
-The install script:
-- Creates `~/.claude/memory/` for your memory data
-- Copies the Python scripts to a stable location
-- Adds a memory import to your `~/.claude/CLAUDE.md`
+### From Local Directory
 
-### Unloading the Plugin (Memories Persist)
+```bash
+# Clone the repository
+git clone https://github.com/jpbester/claude-code-memory.git
 
-If you remove the `--plugin-dir` flag or uninstall, your memories remain safely in `~/.claude/memory/`. To fully remove everything, see [Uninstalling](#uninstalling).
+# Start Claude Code with the plugin
+claude --plugin-dir /path/to/claude-code-memory/plugin
+```
+
+### First-Run Setup
+
+After installing, run the setup skill once to connect memories to your sessions:
+
+```bash
+/memory-setup
+```
+
+This adds a `@memory/MEMORY.md` import to your `~/.claude/CLAUDE.md` so memories are loaded into every session. You only need to do this once.
 
 ## Usage
 
@@ -101,8 +103,8 @@ If you remove the `--plugin-dir` flag or uninstall, your memories remain safely 
 │  SessionStart ──► Session Activity ──► SessionEnd            │
 │       │                                      │               │
 │       ▼                                      ▼               │
-│  Load Memory                          Extract Memories       │
-│  (via CLAUDE.md)                      (uses your plan)       │
+│  Check Synthesis                       Extract Memories      │
+│  (background if due)                   (prompt hook)         │
 └───────────────────────────────────────────────────────────────┘
                          │
                          ▼
@@ -205,12 +207,12 @@ After using Claude Code for a while, your `~/.claude/memory/MEMORY.md` might loo
 
 ### Complete Uninstall
 ```bash
-python scripts/install.py --uninstall
-# Then remove the plugin from your Claude Code configuration
-```
+# Remove the plugin
+/plugin uninstall claude-code-memory
 
-To fully remove all data:
-```bash
+# Optionally remove the @memory/MEMORY.md import from ~/.claude/CLAUDE.md
+
+# To fully remove all memory data:
 rm -rf ~/.claude/memory
 ```
 
@@ -227,11 +229,12 @@ rm -rf ~/.claude/memory
 1. Check if memory is enabled: `/memory status`
 2. Ensure sessions have at least 5 messages
 3. Check the hook configuration is loaded
+4. Run `/memory-setup` if you haven't done the first-run setup
 
 ### Synthesis not running
 1. Run manual sync: `/memory sync`
 2. Check `~/.claude/memory/sessions/` for pending sessions
-3. Verify Python is in your PATH
+3. Verify Node.js is in your PATH
 
 ### High token usage
 1. Reduce `max_memories_per_category` in config

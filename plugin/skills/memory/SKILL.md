@@ -33,9 +33,10 @@ Read and display the full content of `~/.claude/memory/MEMORY.md`. If it doesn't
 
 ### If "sync":
 Run the synthesis script manually:
-1. Execute: `python ~/.claude/memory/scripts/synthesize-memory.py --force`
-2. Show the output
-3. Then display the updated memory content from `~/.claude/memory/MEMORY.md`
+1. Find `synthesize-memory.js` in this plugin's `scripts/` directory (use `${CLAUDE_PLUGIN_ROOT}/scripts/synthesize-memory.js`)
+2. Execute: `node "${CLAUDE_PLUGIN_ROOT}/scripts/synthesize-memory.js" --force`
+3. Show the output
+4. Then display the updated memory content from `~/.claude/memory/MEMORY.md`
 
 ## Notes
 - Memory directory is at `~/.claude/memory/`

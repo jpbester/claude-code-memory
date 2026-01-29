@@ -1,0 +1,16 @@
+{
+  "name": "jpbester",
+  "owner": { "name": "Paul" },
+  "metadata": {
+    "description": "Plugins by jpbester",
+    "homepage": "https://github.com/jpbester/claude-code-memory"
+  },
+  "plugins": [
+    {
+      "name": "claude-code-memory",
+      "version": "2.0.0",
+      "source": "./plugin",
+      "description": "Automatic memory system - brings Claude Chat's memory feature to Claude Code"
+    }
+  ]
+}
