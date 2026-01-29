@@ -76,6 +76,8 @@ After installing, run the setup skill once to connect memories to your sessions:
 
 This adds a `@memory/MEMORY.md` import to your `~/.claude/CLAUDE.md` so memories are loaded into every session. You only need to do this once.
 
+> **Note:** During setup, Claude Code will ask for permission to create files and directories in `~/.claude/memory/`. You can approve these individually or allow all edits in `.claude/` for the session.
+
 ## Usage
 
 ### Viewing Memories
