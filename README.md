@@ -56,6 +56,8 @@ There are several Claude Code memory solutions available ([claude-mem](https://g
 /plugin install claude-code-memory
 ```
 
+> **Important:** When prompted for install scope, choose **"Install for you (user scope)"**. This plugin stores memories in `~/.claude/memory/` which is user-level data, not project-specific.
+
 ### From Local Directory
 
 ```bash
