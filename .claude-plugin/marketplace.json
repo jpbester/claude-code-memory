@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "claude-code-memory",
-      "version": "2.0.1",
+      "version": "2.0.2",
       "source": "./plugin",
       "description": "Automatic memory system - brings Claude Chat's memory feature to Claude Code"
     }

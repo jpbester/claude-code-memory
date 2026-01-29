@@ -1,17 +1,5 @@
 {
   "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "You are a memory extraction system. Analyze the conversation so far and extract memorable information about the user that would be valuable to remember in future sessions. Output ONLY a raw JSON object, no markdown, no code fences, no explanation.\n\nCategories:\n- work_context: Role, employer, projects\n- preferences: Communication style, workflow preferences\n- technical_style: Coding conventions, patterns\n- ongoing_projects: Active projects, directories, current goals\n- tools_and_workflows: Build tools, deployment, version control\n\nRequired JSON format (output ONLY this, nothing else):\n{\"memories\":[{\"category\":\"category_name\",\"content\":\"specific memorable fact\"}],\"session_summary\":\"one sentence summary\"}\n\nRules:\n- Output ONLY valid JSON, no other text\n- Only extract genuinely useful, specific information\n- Skip generic or obvious things\n- If nothing memorable: {\"memories\":[],\"session_summary\":\"Brief session\"}\n- Each memory should be a single, clear fact",
-            "timeout": 60000
-          }
-        ]
-      }
-    ],
     "SessionEnd": [
       {
         "matcher": "",
