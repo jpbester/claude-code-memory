@@ -102,7 +102,7 @@ async function main() {
     (!validCategories.size || validCategories.has(mem.category))
   ).map(mem => ({
     category: String(mem.category),
-    content: String(mem.content).slice(0, 500)
+    content: String(mem.content).slice(0, 200)
   })).slice(0, MAX_MEMORIES);
 
   if (!validMemories.length) return 0;
@@ -317,16 +317,47 @@ async function tryAIExtraction(conversationText) {
 }
 
 /**
+ * Strip code blocks, inline code, and JSON-like content from text.
+ * Returns cleaned natural language text suitable for pattern matching.
+ */
+function stripCodeContent(text) {
+  let cleaned = text;
+  // Remove fenced code blocks (```...```)
+  cleaned = cleaned.replace(/```[\s\S]*?```/g, ' ');
+  // Remove inline code (`...`)
+  cleaned = cleaned.replace(/`[^`]+`/g, ' ');
+  // Remove lines that look like JSON or code
+  cleaned = cleaned.split('\n').filter(line => {
+    const trimmed = line.trim();
+    // Skip lines starting with JSON-like characters
+    if (/^[{}\[\]"']/.test(trimmed)) return false;
+    // Skip lines that look like code assignments or imports
+    if (/^(const |let |var |import |require\(|function |\/\/)/.test(trimmed)) return false;
+    return true;
+  }).join('\n');
+  return cleaned;
+}
+
+/**
+ * Check if a sentence looks like code rather than natural language.
+ */
+function looksLikeCode(sentence) {
+  return /=>|[(){}\[\]]{2,}|require\(|import\s+\w|^\s*(const|let|var|function)\s+\w|[;=]{2,}|\|\||&&/.test(sentence);
+}
+
+/**
  * Heuristic extraction fallback — pattern-match user messages for memorable content.
+ * Only searches USER messages to avoid capturing assistant output as user preferences.
  */
 function heuristicExtraction(conversation, config, workingDir) {
   const memories = [];
-  const { userMessages, assistantMessages } = conversation;
+  const { userMessages } = conversation;
 
-  const allUserText = userMessages.join('\n');
-  const allText = [...userMessages, ...assistantMessages].join('\n');
+  // Clean user messages: strip code blocks, inline code, JSON fragments
+  const cleanedUserMessages = userMessages.map(stripCodeContent);
+  const allUserText = cleanedUserMessages.join('\n');
 
-  // Preference patterns
+  // Preference patterns — only matched against user text
   const preferencePatterns = [
     { pattern: /\bi (?:prefer|like to|want to|always use|usually|tend to)\b/i, category: 'preferences' },
     { pattern: /\bplease (?:always|never|don't|do not)\b/i, category: 'preferences' },
@@ -338,30 +369,31 @@ function heuristicExtraction(conversation, config, workingDir) {
     { pattern: /\bwe (?:use|deploy|build|run|develop)\b/i, category: 'tools_and_workflows' },
   ];
 
-  for (const userMsg of userMessages) {
-    const sentences = userMsg.split(/[.!?\n]+/).filter(s => s.trim().length > 10);
+  for (const userMsg of cleanedUserMessages) {
+    const sentences = userMsg.split(/[.!?\n]+/).filter(s => s.trim().length > 15);
     for (const sentence of sentences) {
       const trimmed = sentence.trim();
-      if (trimmed.length > 500) continue;
+      if (trimmed.length > 300) continue; // Long sentences are usually pasted content
+      if (looksLikeCode(trimmed)) continue; // Skip code-like sentences
       for (const { pattern, category } of preferencePatterns) {
         if (pattern.test(trimmed)) {
-          memories.push({ category, content: trimmed });
+          memories.push({ category, content: trimmed.slice(0, 200) });
           break;
         }
       }
     }
   }
 
-  // Technology detection (2+ mentions required)
+  // Technology detection — only from USER messages, 3+ mentions required
   const extCounts = {};
   const extPattern = /\.(ts|tsx|js|jsx|py|cs|java|go|rs|rb|php|vue|svelte|swift|kt|cpp|c|h)\b/gi;
   let match;
-  while ((match = extPattern.exec(allText)) !== null) {
+  while ((match = extPattern.exec(allUserText)) !== null) {
     const ext = match[1].toLowerCase();
     extCounts[ext] = (extCounts[ext] || 0) + 1;
   }
   const significantExts = Object.entries(extCounts)
-    .filter(([, count]) => count >= 2)
+    .filter(([, count]) => count >= 3)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
 
@@ -372,7 +404,7 @@ function heuristicExtraction(conversation, config, workingDir) {
     });
   }
 
-  // Framework detection (2+ mentions required)
+  // Framework detection — only from USER messages, 3+ mentions required
   const frameworks = [
     { names: ['React', 'react'], label: 'React' },
     { names: ['Next.js', 'nextjs', 'next/'], label: 'Next.js' },
@@ -393,10 +425,10 @@ function heuristicExtraction(conversation, config, workingDir) {
     let count = 0;
     for (const name of fw.names) {
       const regex = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-      const matches = allText.match(regex);
+      const matches = allUserText.match(regex);
       if (matches) count += matches.length;
     }
-    if (count >= 2) detectedFrameworks.push(fw.label);
+    if (count >= 3) detectedFrameworks.push(fw.label);
   }
 
   if (detectedFrameworks.length) {
@@ -406,12 +438,18 @@ function heuristicExtraction(conversation, config, workingDir) {
     });
   }
 
-  // Working directory as project context
+  // Working directory as project context — only if it looks like a real project path
   if (workingDir) {
-    memories.push({
-      category: 'ongoing_projects',
-      content: `Worked in: ${workingDir}`
-    });
+    const dirName = path.basename(workingDir);
+    const parentDir = path.basename(path.dirname(workingDir));
+    // Skip generic paths: home dirs, root, Desktop, Documents, etc.
+    const genericNames = new Set(['home', 'users', 'user', 'desktop', 'documents', 'downloads', 'tmp', 'temp', '']);
+    if (!genericNames.has(dirName.toLowerCase()) && !genericNames.has(parentDir.toLowerCase())) {
+      memories.push({
+        category: 'ongoing_projects',
+        content: `Worked in: ${workingDir}`.slice(0, 200)
+      });
+    }
   }
 
   return memories.slice(0, MAX_MEMORIES);
