@@ -129,11 +129,54 @@ async function main() {
 }
 
 /**
+ * Wait for a file to stabilize (stop being written to) before reading.
+ * Checks file size every 500ms for up to 10 seconds.
+ * Returns true if stable, false if timeout.
+ */
+function waitForFileStable(filePath, timeoutMs = 10000, checkIntervalMs = 500) {
+  const startTime = Date.now();
+  let lastSize = -1;
+  let stableCount = 0;
+  const requiredStableChecks = 3; // File size must be stable for 3 consecutive checks
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const stats = fs.statSync(filePath);
+      const currentSize = stats.size;
+
+      if (currentSize === lastSize) {
+        stableCount++;
+        if (stableCount >= requiredStableChecks) {
+          return true; // File is stable
+        }
+      } else {
+        stableCount = 0; // Reset counter if size changed
+      }
+
+      lastSize = currentSize;
+
+      // Sleep for checkIntervalMs
+      const sleepEnd = Date.now() + checkIntervalMs;
+      while (Date.now() < sleepEnd) { /* busy wait */ }
+    } catch (e) {
+      // File doesn't exist or can't be accessed
+      return false;
+    }
+  }
+
+  return false; // Timeout
+}
+
+/**
  * Extract only human-typed conversation text from a transcript file.
  * Filters out tool_result blocks, tool_use blocks, commands, progress entries, etc.
  * Returns condensed conversation text suitable for AI analysis.
  */
 function extractConversationText(transcriptPath, config) {
+  // Wait for transcript file to stabilize (in case Claude Code is still writing)
+  // This prevents reading incomplete transcripts that cut off the last messages
+  waitForFileStable(transcriptPath, 10000, 500);
+
   const raw = fs.readFileSync(transcriptPath, 'utf-8');
   const lines = raw.split('\n').filter(l => l.trim());
 

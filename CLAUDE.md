@@ -16,7 +16,7 @@ Claude Code Memory is a marketplace plugin that provides automatic memory extrac
 
 **Hook-based Memory Flow (Dual Extraction Strategy):**
 1. **SessionStart** (`check-synthesis.js`): Checks if synthesis is overdue and triggers background synthesis if needed
-2. **SessionEnd** (`save-memory.js`): Finds transcript, extracts conversation text, calls `claude -p` (Haiku) for AI extraction, falls back to heuristic extraction if that fails
+2. **SessionEnd** (`save-memory.js`): Waits for transcript file to stabilize (file size stable for 1.5s), extracts conversation text, calls `claude -p` (Haiku) for AI extraction, falls back to heuristic extraction if that fails
 
 **Transcript Discovery** (`findTranscriptPath` in `memory-utils.js`):
 - Strategy 1: Use `hookData.transcript_path` directly if file exists
